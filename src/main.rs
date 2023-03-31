@@ -69,9 +69,10 @@ fn round_to(number: f64, decimal_places: i32) -> f64 {
     return (number * power).round() / power;
 }
 
-fn get_step_size(bounds: (f64, f64), steps: f64) -> Result<f64, std::io::ErrorKind> {
+fn get_round_places() -> Result<f64, std::io::ErrorKind> {
     println!("Enter the amount of decimal places should the step size be rounded to:");
     let round_places: f64 = get_stdin::<f64>()?;
+
     if round_places.fract() != 0.0 {
         println!("{}", io_error_messages::FLOAT_ROUND_PLACES.bright_red().bold());
         return Err(std::io::ErrorKind::InvalidData);
@@ -81,8 +82,12 @@ fn get_step_size(bounds: (f64, f64), steps: f64) -> Result<f64, std::io::ErrorKi
         return Err(std::io::ErrorKind::InvalidData);
     }
 
+    return Ok(round_places);
+}
+
+fn get_step_size(bounds: (f64, f64), steps: f64, round_places: f64) -> f64 {
     let step_size: f64 = (bounds.1 - bounds.0) / steps;
-    return Ok(round_to(step_size, round_places as i32));
+    return round_to(step_size, round_places as i32);
 }
 
 fn get_differential_expression() -> Result<meval::Expr, std::io::ErrorKind> {
@@ -107,34 +112,32 @@ fn get_initial_value() -> Result<f64, std::io::ErrorKind> {
 fn compute_eulers_method() -> Result<(), std::io::ErrorKind> {
     let bounds: (f64, f64) = get_bounds()?;
     let steps: f64 = get_steps()?;
-    let step_size: f64 = get_step_size(bounds, steps)?;
+    let round_places: f64 = get_round_places()?;
+    let step_size: f64 = get_step_size(bounds, steps, round_places);
 
     let function_value: std::cell::Cell<f64> = std::cell::Cell::new(get_initial_value()?);
     let current_step: std::cell::Cell<f64> = std::cell::Cell::new(bounds.0);
-
-    // let context: meval::Context = meval::Context::new();
-    // context.func("e", |x| 
 
     let differential_expression = match get_differential_expression()?.bind2_with_context(meval::Context::new(), "x", "y") {
             Ok(result) => result,
             Err(_) => {
                 println!(r#"
-                    The differential expression could not be bound using the current context:
-                    x = {}
-                    y = {}
+The differential expression could not be bound using the current context:
+x = {}
+y = {}
                 "#, current_step.get(), function_value.get());
                 return Err(std::io::ErrorKind::InvalidData);
             }
     };
 
     let mut current_index: i32 = 1;
-    let expression_result: f64 = function_value.get() + step_size * differential_expression(current_step.get(), function_value.get());
     while current_index <= steps as i32 {
+        let expression_result: f64 = function_value.get() + step_size * differential_expression(current_step.get(), function_value.get());
         println!(r#"
-            w_{} = {}
-            x_{} = {}
-            y_{} = {}
-        "#, current_index, expression_result, current_index - 1, current_step.get(), current_index - 1, function_value.get());
+w_{} = {}
+x_{} = {}
+y_{} = {}
+        "#, current_index, expression_result, current_index - 1, round_to(current_step.get(), round_places as i32), current_index - 1, function_value.get());
 
         current_step.set(current_step.get() + step_size);
         function_value.set(expression_result);
